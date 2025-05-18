@@ -1,0 +1,66 @@
+name: Full Security Scan (Trivy + ClamAV + YARA)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  full-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      ##################################################
+      # 1️⃣ Trivy – Quét mã độc & bí mật trong source
+      ##################################################
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run Trivy Secret Scan
+        run: |
+          trivy fs . \
+            --scanners secret \
+            --exit-code 0 \
+            --format table
+
+      ##################################################
+      # 2️⃣ ClamAV – Quét mã độc/virus/trojans
+      ##################################################
+      - name: Install ClamAV
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav clamav-daemon
+
+      - name: Update ClamAV DB (fix daemon conflict)
+        run: |
+          sudo systemctl stop clamav-freshclam || true
+          sudo systemctl stop clamav-daemon || true
+          sudo freshclam
+
+      - name: Run ClamAV Scan
+        run: |
+          clamscan -r --infected --no-summary . || true
+
+      ##################################################
+      # 3️⃣ YARA – Phát hiện mẫu mã độc tiềm ẩn (pattern rules)
+      ##################################################
+      - name: Install YARA
+        run: |
+          sudo apt-get install -y yara
+
+      - name: Clone full YARA-Rules repo
+        run: |
+          git clone https://github.com/Yara-Rules/rules.git yara_rules
+
+      - name: Run YARA scan on all rules
+        run: |
+          find yara_rules -type f \( -name "*.yar" -o -name "*.yara" \) | while read rule; do
+            echo "==> Scanning with: $rule"
+            yara -r "$rule" . || true
+          done
