@@ -1,0 +1,2 @@
+flask==0.12     # chứa CVE-2018-1000656
+requests==2.19  # chứa CVE-2018-18074
